@@ -3,25 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D魔法圣诞树 - 平板横屏优化版</title>
+    <title>3D魔法圣诞树 - 平板完美修复版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; position: fixed; width: 100%; height: 100%; }
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 100; color: white; }
-        .btn { background: #e63946; color: #fff; border: none; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(230,57,70,0.4); transition: 0.3s; }
+        /* UI 层级必须最高，且不能被镜像 */
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 1000; color: white; pointer-events: auto; }
+        .btn { background: #e63946; color: #fff; border: none; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(230,57,70,0.4); transition: 0.3s; pointer-events: auto; }
         .btn:hover { background: #ff4d5a; transform: scale(1.05); }
         #guide { background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; border: 1px solid #ffd700; margin-top: 10px; width: 260px; backdrop-filter: blur(8px); }
         .gesture-item { margin-bottom: 8px; font-size: 13px; color: #eee; line-height: 1.4; }
         #input_video { display: none; }
-        /* 镜像翻转渲染画面，让手势操作更符合直觉 */
-        canvas { transform: scaleX(-1); } 
+        /* 仅对 canvas 进行镜像，确保 UI 正常运行 */
+        canvas { transform: scaleX(-1); position: absolute; top: 0; left: 0; z-index: 1; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <button class="btn" onclick="document.getElementById('file-input').click()">🖼️ 上传照片挂件</button>
+        <label for="file-input" class="btn">🖼️ 上传照片挂件</label>
         <input type="file" id="file-input" accept="image/*" multiple style="display:none">
+        
         <div id="guide">
-            <h3 style="margin:0 0 10px 0; color:#ffd700; font-size:16px;">🎄 平板横屏交互</h3>
+            <h3 style="margin:0 0 10px 0; color:#ffd700; font-size:16px;">🎄 平板横屏操作</h3>
             <div class="gesture-item">1️⃣ 👌 <b>捏合</b>：开启圣诞树</div>
             <div class="gesture-item">2️⃣ ☝️ <b>食指</b>：锁定前方照片</div>
             <div class="gesture-item">3️⃣ ✊ <b>握拳</b>：全屏查看</div>
@@ -128,18 +130,24 @@
         }
         const starGroup = createGoldenStar();
         treeGroup.add(starGroup);
-        scene.add(new THREE.PointLight(0xffd700, 1.5, 10));
 
-        // --- 4. 彩色渐变祝福语 ---
+        // --- 4. 修复镜像字体的祝福语 ---
         function createGradientText(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             canvas.width = 1024; canvas.height = 256;
+            
+            // 重点：在这里也执行一次水平翻转，抵消 canvas 的 CSS 翻转
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+
             const grad = ctx.createLinearGradient(0, 0, canvas.width, 0);
             grad.addColorStop(0, '#ff0000'); grad.addColorStop(0.5, '#00ff00'); grad.addColorStop(1, '#00ffff');
             ctx.font = "bold 110px 'Georgia', serif"; ctx.fillStyle = grad; ctx.textAlign = "center";
             ctx.fillText(text, 512, 150);
-            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+            
+            const tex = new THREE.CanvasTexture(canvas);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
             sprite.scale.set(11, 2.75, 1);
             return sprite;
         }
@@ -158,13 +166,13 @@
         ribbonGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ribbonPoints), 100, 0.05, 8, false), ribbonMat));
         treeGroup.add(ribbonGroup);
 
-        // --- 6. 手势引擎 (前置摄像头适配) ---
+        // --- 6. 手势引擎 ---
         const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
         hands.onResults((res) => {
             if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                 const h = res.multiHandLandmarks[0];
-                // 因为画布镜像了，所以旋转方向也需要取反处理，保持手势直觉
+                // 翻转后的 x 轴处理
                 rotationInertia = (h[0].x - lastHandX) * 18; lastHandX = h[0].x;
                 const dP = Math.hypot(h[4].x-h[8].x, h[4].y-h[8].y);
                 const dS = Math.hypot(h[0].x-h[5].x, h[0].y-h[5].y);
@@ -184,7 +192,6 @@
             }
         });
 
-        // 强制开启前置摄像头
         new Camera(videoElement, {
             onFrame: async () => { await hands.send({image: videoElement}); },
             width: 640, height: 480, facingMode: 'user'
@@ -211,7 +218,7 @@
             }
             geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
             
-            // 镜像环境下，旋转惯性方向调整
+            // 镜像环境下修正旋转方向
             treeGroup.rotation.y += rotationInertia * 0.08;
             starGroup.visible = christmasLabel.visible = isTreeFormed;
             
@@ -227,7 +234,6 @@
             for(let i=0; i<1200; i++){ sArr[i*3+1]-=0.05; if(sArr[i*3+1]<-20) sArr[i*3+1]=25; }
             snowGeo.attributes.position.needsUpdate = true;
 
-            // 动态焦点
             if (isTreeFormed && (isPointing || isFist)) {
                 let minZ = Infinity; let bestTarget = null;
                 photos.forEach(m => {
@@ -258,9 +264,11 @@
         }
         animate();
 
-        document.getElementById('file-input').onchange = (e) => {
+        // 绑定上传逻辑
+        document.getElementById('file-input').addEventListener('change', (e) => {
             Array.from(e.target.files).slice(0, MAX_PHOTOS - photos.length).forEach((f) => {
-                new THREE.TextureLoader().load(URL.createObjectURL(f), (t) => {
+                const url = URL.createObjectURL(f);
+                new THREE.TextureLoader().load(url, (t) => {
                     const p = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.6), new THREE.MeshBasicMaterial({map:t, transparent:true, opacity:0, side:THREE.DoubleSide}));
                     const index = photos.length;
                     const h = (index / MAX_PHOTOS) * 8 - 2.5; 
@@ -271,7 +279,7 @@
                     treeGroup.add(p); photos.push(p);
                 });
             });
-        };
+        });
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
