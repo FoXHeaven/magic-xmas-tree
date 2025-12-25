@@ -3,33 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D魔法圣诞树 - 最终修正版</title>
+    <title>3D魔法圣诞树 - 最终完美修复版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; position: fixed; width: 100%; height: 100%; }
-        /* 1. 确保 UI 层级足够高，且不被镜像 */
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 1000; color: white; pointer-events: auto; }
-        .btn { background: #e63946; color: #fff; border: 2px solid #fff; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(230,57,70,0.4); transition: 0.3s; display: inline-block; }
-        .btn:hover { background: #ff4d5a; transform: scale(1.05); }
-        #guide { background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; border: 1px solid #ffd700; margin-top: 10px; width: 260px; backdrop-filter: blur(8px); pointer-events: none; }
+        
+        /* UI 容器 */
+        #ui { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            z-index: 10000; /* 确保层级最高 */
+            color: white; 
+            pointer-events: none; /* 容器本身不拦截，让内部元素去拦截 */
+        }
+
+        /* 核心修复：上传按钮容器 */
+        .upload-btn-wrapper {
+            position: relative;
+            display: inline-block;
+            pointer-events: auto; /* 开启点击 */
+            box-shadow: 0 4px 15px rgba(230,57,70,0.4);
+            border-radius: 25px;
+            transition: transform 0.2s;
+        }
+        .upload-btn-wrapper:active { transform: scale(0.95); }
+
+        /* 视觉上的按钮 */
+        .btn-visual { 
+            background: #e63946; 
+            color: #fff; 
+            border: 2px solid #fff; 
+            padding: 12px 25px; 
+            border-radius: 25px; 
+            font-weight: bold; 
+            font-size: 15px;
+            display: block;
+        }
+
+        /* 真正的 Input：完全透明，铺满整个按钮区域 */
+        .file-input-hidden {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0; /* 透明不可见 */
+            cursor: pointer;
+            z-index: 10001; /* 比视觉按钮更高 */
+        }
+
+        #guide { 
+            background: rgba(0,0,0,0.85); 
+            padding: 15px; 
+            border-radius: 12px; 
+            border: 1px solid #ffd700; 
+            margin-top: 10px; 
+            width: 260px; 
+            backdrop-filter: blur(8px);
+            pointer-events: none;
+        }
         .gesture-item { margin-bottom: 8px; font-size: 13px; color: #eee; line-height: 1.4; }
+        
+        /* 3D 画布：镜像但允许穿透 */
+        canvas { 
+            transform: scaleX(-1); 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            z-index: 1; 
+            pointer-events: none; /* 关键：让鼠标/手指穿透画布点到 UI */
+        }
+        
         #input_video { display: none; }
-        /* 2. 关键修复：增加 pointer-events: none 允许电脑点击穿透 */
-        canvas { transform: scaleX(-1); position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <label for="file-input" class="btn">🖼️ 上传照片挂件</label>
-        <input type="file" id="file-input" accept="image/*" multiple style="display:none">
+        <div class="upload-btn-wrapper">
+            <div class="btn-visual">🖼️ 上传照片挂件</div>
+            <input type="file" class="file-input-hidden" id="file-input" accept="image/*" multiple>
+        </div>
         
         <div id="guide">
-            <h3 style="margin:0 0 10px 0; color:#ffd700; font-size:16px;">🎄 平板横屏操作</h3>
-            <div class="gesture-item">1️⃣ 👌 <b>捏合</b>：开启圣诞树</div>
-            <div class="gesture-item">2️⃣ ☝️ <b>食指</b>：锁定前方照片</div>
-            <div class="gesture-item">3️⃣ ✊ <b>握拳</b>：全屏查看</div>
-            <div class="gesture-item">4️⃣ 🖐️ <b>张开</b>：重置散开</div>
+            <h3 style="margin:0 0 10px 0; color:#ffd700; font-size:16px;">🎄 交互指南</h3>
+            <div class="gesture-item">1️⃣ 👌 <b>捏合</b>：粒子聚集成树</div>
+            <div class="gesture-item">2️⃣ 🖐️ <b>张开五指</b>：散开重置</div>
+            <div class="gesture-item">3️⃣ ☝️ <b>食指</b>：指向锁定照片</div>
+            <div class="gesture-item">4️⃣ ✊ <b>握拳</b>：拉近照片查看</div>
         </div>
     </div>
+
     <video id="input_video" autoplay playsinline muted></video>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
@@ -40,13 +103,17 @@
         const videoElement = document.getElementById('input_video');
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        // alpha: true 允许透明背景，配合 pointer-events 穿透
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 3. 补齐灯光：确保所有材质在任何机器上都能亮起来
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+        // 灯光：修复电脑上五角星全黑的问题
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffd700, 1.5);
+        dirLight.position.set(0, 10, 10);
+        scene.add(dirLight);
 
         const treeGroup = new THREE.Group();
         treeGroup.scale.set(1.25, 1.25, 1.25); 
@@ -59,7 +126,7 @@
         const photos = [];
         const MAX_PHOTOS = 12;
 
-        // --- 粒子系统 ---
+        // --- 1. 粒子系统 ---
         const count = 25000;
         const geo = new THREE.BufferGeometry();
         const pos = new Float32Array(count * 3);
@@ -100,13 +167,12 @@
             treeColors[i*3] = col.r; treeColors[i*3+1] = col.g; treeColors[i*3+2] = col.b;
             currentColors[i*3] = burstColor.r; currentColors[i*3+1] = burstColor.g; currentColors[i*3+2] = burstColor.b;
         }
-
         updateBurstPositions();
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geo.setAttribute('color', new THREE.BufferAttribute(currentColors, 3));
         treeGroup.add(new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.02, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending })));
 
-        // --- 雪花 ---
+        // --- 2. 雪花 ---
         const snowGeo = new THREE.BufferGeometry();
         const snowPosArr = new Float32Array(1200 * 3);
         for(let i=0; i<1200; i++) { snowPosArr[i*3]=(Math.random()-0.5)*50; snowPosArr[i*3+1]=Math.random()*40; snowPosArr[i*3+2]=(Math.random()-0.5)*40; }
@@ -114,7 +180,7 @@
         const snowMat = new THREE.PointsMaterial({size: 0.05, color: 0xffffff, transparent: true, opacity: 0});
         scene.add(new THREE.Points(snowGeo, snowMat));
 
-        // --- 五角星 (回归你原本好用的材质) ---
+        // --- 3. 五角星 (MeshPhongMaterial 配合灯光) ---
         function createGoldenStar() {
             const shape = new THREE.Shape();
             const outerRadius = 0.6; const innerRadius = 0.28;
@@ -126,8 +192,7 @@
             }
             const starGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.05, bevelSegments: 1 });
             starGeo.center(); 
-            // 这里换回 MeshPhongMaterial 确保电脑 Pad 都亮
-            const starMat = new THREE.MeshPhongMaterial({ color: 0xffd700, emissive: 0x443300 });
+            const starMat = new THREE.MeshPhongMaterial({ color: 0xffd700, emissive: 0x332200, shininess: 100 });
             const group = new THREE.Group();
             group.add(new THREE.Mesh(starGeo, starMat));
             group.position.y = 7.4; group.visible = false;
@@ -136,7 +201,7 @@
         const starGroup = createGoldenStar();
         treeGroup.add(starGroup);
 
-        // --- 祝福语 ---
+        // --- 4. 祝福语 ---
         function createGradientText(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -154,7 +219,7 @@
         christmasLabel.position.set(0, 8.8, 0); christmasLabel.visible = false;
         treeGroup.add(christmasLabel);
 
-        // --- 彩带 ---
+        // --- 5. 彩带 ---
         const ribbonMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0 });
         const ribbonPoints = [];
         for (let i = 0; i <= 100; i++) {
@@ -165,25 +230,43 @@
         ribbonGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ribbonPoints), 100, 0.05, 8, false), ribbonMat));
         treeGroup.add(ribbonGroup);
 
-        // --- 手势引擎 ---
+        // --- 6. 手势引擎 (包含张手重置逻辑) ---
         const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
+        
         hands.onResults((res) => {
             if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                 const h = res.multiHandLandmarks[0];
                 rotationInertia = (h[0].x - lastHandX) * 18; lastHandX = h[0].x;
-                const dP = Math.hypot(h[4].x-h[8].x, h[4].y-h[8].y);
-                const dS = Math.hypot(h[0].x-h[5].x, h[0].y-h[5].y);
-                if (dP < dS * 0.4) { hasUnlockedMagic = true; isTreeFormed = true; } 
-                else if (Math.hypot(h[8].x-h[0].x, h[8].y-h[0].y) > dS * 5.2) { 
-                    hasUnlockedMagic = false; isTreeFormed = false; isFist = false; isPointing = false; 
+                
+                // 关键距离计算
+                const dP = Math.hypot(h[4].x-h[8].x, h[4].y-h[8].y); // 拇指-食指距离
+                const dS = Math.hypot(h[0].x-h[5].x, h[0].y-h[5].y); // 手掌参考大小
+                const tips = [8,12,16,20];
+                
+                // 1. 捏合 -> 形成树
+                if (dP < dS * 0.4) { 
+                    hasUnlockedMagic = true; 
+                    isTreeFormed = true; 
+                } 
+                // 2. 五指张开 -> 散开重置 (找回的功能)
+                else if (tips.reduce((s,i)=> s + Math.hypot(h[i].x-h[0].x, h[i].y-h[0].y), 0) > dS * 5.5) { 
+                    // 只有当树已经形成过，张开手才会重置
+                    if(isTreeFormed) {
+                         isTreeFormed = false; 
+                         isFist = false; 
+                         isPointing = false;
+                    }
                 }
-                if (hasUnlockedMagic) {
-                    const tips = [8,12,16,20];
+
+                if (hasUnlockedMagic && isTreeFormed) {
                     const fistCheck = tips.every(i => Math.hypot(h[i].x-h[0].x, h[i].y-h[0].y) < dS * 1.2);
-                    if (fistCheck) { isFist = true; isPointing = false; } 
-                    else { 
-                        isPointing = h[8].y < h[6].y && h[12].y > h[10].y && h[16].y > h[14].y; 
+                    if (fistCheck) { 
+                        isFist = true; isPointing = false; 
+                    } else { 
+                        // 简单的指点判断
+                        isPointing = h[8].y < h[6].y && h[12].y > h[10].y; 
+                        if (isPointing) isFist = false; else isFist = false;
                     }
                 }
             }
@@ -194,7 +277,7 @@
             width: 640, height: 480, facingMode: 'user'
         }).start();
 
-        // --- 动画循环 ---
+        // --- 7. 动画主循环 ---
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
@@ -206,8 +289,13 @@
                 let tx = isTreeFormed ? treePos[idx] : burstPos[idx];
                 let ty = isTreeFormed ? treePos[idx+1] : burstPos[idx+1];
                 let tz = isTreeFormed ? treePos[idx+2] : burstPos[idx+2];
-                if(!isTreeFormed) { tx += Math.sin(time + driftSeed[i]) * 0.2; ty += Math.cos(time + driftSeed[i] * 1.1) * 0.2; }
+                // 散开时飘动
+                if(!isTreeFormed) { 
+                    tx += Math.sin(time + driftSeed[i]) * 0.2; 
+                    ty += Math.cos(time + driftSeed[i] * 1.1) * 0.2; 
+                }
                 pArr[idx]+=(tx-pArr[idx])*0.08; pArr[idx+1]+=(ty-pArr[idx+1])*0.08; pArr[idx+2]+=(tz-pArr[idx+2])*0.08;
+                
                 const tr = isTreeFormed ? treeColors[idx] : burstColor.r;
                 const tg = isTreeFormed ? treeColors[idx+1] : burstColor.g;
                 const tb = isTreeFormed ? treeColors[idx+2] : burstColor.b;
@@ -218,6 +306,7 @@
             treeGroup.rotation.y += rotationInertia * 0.08;
             starGroup.visible = christmasLabel.visible = isTreeFormed;
             
+            // 装饰物逻辑
             if(isTreeFormed) {
                 christmasLabel.position.y = 8.8 + Math.sin(time * 1.5) * 0.2;
                 starGroup.rotation.y += 0.05;
@@ -230,7 +319,7 @@
             for(let i=0; i<1200; i++){ sArr[i*3+1]-=0.05; if(sArr[i*3+1]<-20) sArr[i*3+1]=25; }
             snowGeo.attributes.position.needsUpdate = true;
 
-            // 锁定与缩放逻辑
+            // 照片交互
             if (isTreeFormed && (isPointing || isFist)) {
                 let minZ = Infinity; let bestTarget = null;
                 photos.forEach(m => {
@@ -261,7 +350,7 @@
         }
         animate();
 
-        // 上传照片逻辑
+        // 8. 上传逻辑：物理 Input 触发
         document.getElementById('file-input').addEventListener('change', (e) => {
             Array.from(e.target.files).slice(0, MAX_PHOTOS - photos.length).forEach((f) => {
                 const url = URL.createObjectURL(f);
@@ -279,8 +368,10 @@
         });
 
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight); updateBurstPositions();
+            camera.aspect = window.innerWidth / window.innerHeight; 
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight); 
+            updateBurstPositions();
         });
     </script>
 </body>
