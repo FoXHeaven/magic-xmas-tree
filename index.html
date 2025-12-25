@@ -2,30 +2,33 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>3D魔法圣诞树 - 完美交互终极版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D魔法圣诞树 - 平板横屏优化版</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; position: fixed; width: 100%; height: 100%; }
         #ui { position: absolute; top: 20px; left: 20px; z-index: 100; color: white; }
         .btn { background: #e63946; color: #fff; border: none; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(230,57,70,0.4); transition: 0.3s; }
         .btn:hover { background: #ff4d5a; transform: scale(1.05); }
         #guide { background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; border: 1px solid #ffd700; margin-top: 10px; width: 260px; backdrop-filter: blur(8px); }
         .gesture-item { margin-bottom: 8px; font-size: 13px; color: #eee; line-height: 1.4; }
         #input_video { display: none; }
+        /* 镜像翻转渲染画面，让手势操作更符合直觉 */
+        canvas { transform: scaleX(-1); } 
     </style>
 </head>
 <body>
     <div id="ui">
-        <button class="btn" onclick="document.getElementById('file-input').click()">🖼️ 上传照片挂件 (上限12张)</button>
+        <button class="btn" onclick="document.getElementById('file-input').click()">🖼️ 上传照片挂件</button>
         <input type="file" id="file-input" accept="image/*" multiple style="display:none">
         <div id="guide">
-            <h3 style="margin:0 0 10px 0; color:#ffd700; font-size:16px;">🎄 圣诞交互指令</h3>
-            <div class="gesture-item">1️⃣ 👌 <b>捏合</b>：唤醒粒子圣诞树</div>
-            <div class="gesture-item">2️⃣ ☝️ <b>食指</b>：动态追踪并锁定前方照片</div>
-            <div class="gesture-item">3️⃣ ✊ <b>握拳</b>：全屏查看当前锁定的照片</div>
-            <div class="gesture-item">4️⃣ 🖐️ <b>张开</b>：重置并散开粒子</div>
+            <h3 style="margin:0 0 10px 0; color:#ffd700; font-size:16px;">🎄 平板横屏交互</h3>
+            <div class="gesture-item">1️⃣ 👌 <b>捏合</b>：开启圣诞树</div>
+            <div class="gesture-item">2️⃣ ☝️ <b>食指</b>：锁定前方照片</div>
+            <div class="gesture-item">3️⃣ ✊ <b>握拳</b>：全屏查看</div>
+            <div class="gesture-item">4️⃣ 🖐️ <b>张开</b>：重置散开</div>
         </div>
     </div>
-    <video id="input_video" autoplay playsinline></video>
+    <video id="input_video" autoplay playsinline muted></video>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -39,7 +42,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- 整体放大控制 ---
         const treeGroup = new THREE.Group();
         treeGroup.scale.set(1.25, 1.25, 1.25); 
         scene.add(treeGroup);
@@ -51,7 +53,7 @@
         const photos = [];
         const MAX_PHOTOS = 12;
 
-        // --- 1. 粒子系统 (森林绿) ---
+        // --- 1. 粒子系统 ---
         const count = 25000;
         const geo = new THREE.BufferGeometry();
         const pos = new Float32Array(count * 3);
@@ -98,7 +100,7 @@
         geo.setAttribute('color', new THREE.BufferAttribute(currentColors, 3));
         treeGroup.add(new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.02, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending })));
 
-        // --- 2. 雪花效果 ---
+        // --- 2. 雪花 ---
         const snowGeo = new THREE.BufferGeometry();
         const snowPosArr = new Float32Array(1200 * 3);
         for(let i=0; i<1200; i++) { snowPosArr[i*3]=(Math.random()-0.5)*50; snowPosArr[i*3+1]=Math.random()*40; snowPosArr[i*3+2]=(Math.random()-0.5)*40; }
@@ -106,11 +108,10 @@
         const snowMat = new THREE.PointsMaterial({size: 0.05, color: 0xffffff, transparent: true, opacity: 0});
         scene.add(new THREE.Points(snowGeo, snowMat));
 
-        // --- 3. 正宗立体五角星 ---
+        // --- 3. 完美五角星 ---
         function createGoldenStar() {
             const shape = new THREE.Shape();
-            const outerRadius = 0.6;
-            const innerRadius = 0.28;
+            const outerRadius = 0.6; const innerRadius = 0.28;
             for (let i = 0; i < 10; i++) {
                 const angle = (i * Math.PI) / 5 - Math.PI / 2;
                 const r = i % 2 === 0 ? outerRadius : innerRadius;
@@ -157,12 +158,13 @@
         ribbonGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ribbonPoints), 100, 0.05, 8, false), ribbonMat));
         treeGroup.add(ribbonGroup);
 
-        // --- 6. 手势识别引擎 ---
+        // --- 6. 手势引擎 (前置摄像头适配) ---
         const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8, minTrackingConfidence: 0.8 });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
         hands.onResults((res) => {
             if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                 const h = res.multiHandLandmarks[0];
+                // 因为画布镜像了，所以旋转方向也需要取反处理，保持手势直觉
                 rotationInertia = (h[0].x - lastHandX) * 18; lastHandX = h[0].x;
                 const dP = Math.hypot(h[4].x-h[8].x, h[4].y-h[8].y);
                 const dS = Math.hypot(h[0].x-h[5].x, h[0].y-h[5].y);
@@ -181,7 +183,12 @@
                 }
             }
         });
-        new Camera(videoElement, { onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480 }).start();
+
+        // 强制开启前置摄像头
+        new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 640, height: 480, facingMode: 'user'
+        }).start();
 
         // --- 7. 动画循环 ---
         function animate() {
@@ -190,7 +197,6 @@
             const pArr = geo.attributes.position.array;
             const cArr = geo.attributes.color.array;
 
-            // 粒子运动逻辑
             for(let i=0; i<count; i++){
                 const idx = i*3;
                 let tx = isTreeFormed ? treePos[idx] : burstPos[idx];
@@ -205,7 +211,8 @@
             }
             geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
             
-            treeGroup.rotation.y -= rotationInertia * 0.08;
+            // 镜像环境下，旋转惯性方向调整
+            treeGroup.rotation.y += rotationInertia * 0.08;
             starGroup.visible = christmasLabel.visible = isTreeFormed;
             
             if(isTreeFormed) {
@@ -215,53 +222,42 @@
                 ribbonGroup.rotation.y += 0.015;
             } else { ribbonMat.opacity += (0 - ribbonMat.opacity) * 0.1; }
 
-            // 雪花运动
             snowMat.opacity += (isTreeFormed ? 0.8 : -snowMat.opacity) * 0.05;
             const sArr = snowGeo.attributes.position.array;
             for(let i=0; i<1200; i++){ sArr[i*3+1]-=0.05; if(sArr[i*3+1]<-20) sArr[i*3+1]=25; }
             snowGeo.attributes.position.needsUpdate = true;
 
-            // --- 动态焦点追踪与手势放大逻辑 ---
+            // 动态焦点
             if (isTreeFormed && (isPointing || isFist)) {
-                let minZ = Infinity;
-                let bestTarget = null;
+                let minZ = Infinity; let bestTarget = null;
                 photos.forEach(m => {
-                    const worldPos = new THREE.Vector3();
-                    m.getWorldPosition(worldPos);
+                    const worldPos = new THREE.Vector3(); m.getWorldPosition(worldPos);
                     const d = worldPos.distanceTo(camera.position);
                     if (d < minZ) { minZ = d; bestTarget = m; }
                 });
                 lockedTarget = bestTarget;
-            } else {
-                lockedTarget = null;
-            }
+            } else { lockedTarget = null; }
 
             photos.forEach((m) => {
                 m.material.opacity += (isTreeFormed ? 1 : -m.material.opacity) * 0.1;
                 if (isTreeFormed && m === lockedTarget) {
                     if (isFist) {
                         const fPos = treeGroup.worldToLocal(new THREE.Vector3(0, 0, 11));
-                        m.position.lerp(fPos, 0.15); 
-                        m.scale.lerp(new THREE.Vector3(8.5, 8.5, 8.5), 0.15);
+                        m.position.lerp(fPos, 0.15); m.scale.lerp(new THREE.Vector3(8.5, 8.5, 8.5), 0.15);
                         m.rotation.set(0, -treeGroup.rotation.y, 0);
                     } else { 
-                        m.position.lerp(m.userData.relPos, 0.15); 
-                        m.scale.lerp(new THREE.Vector3(2.2, 2.2, 2.2), 0.15); 
-                        m.lookAt(camera.position); 
+                        m.position.lerp(m.userData.relPos, 0.15); m.scale.lerp(new THREE.Vector3(2.2, 2.2, 2.2), 0.15); m.lookAt(camera.position); 
                     }
                 } else {
-                    m.position.lerp(m.userData.relPos, 0.1); 
-                    m.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1); 
-                    m.lookAt(camera.position); 
+                    m.position.lerp(m.userData.relPos, 0.1); m.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1); m.lookAt(camera.position); 
                 }
             });
 
             renderer.render(scene, camera);
-            camera.position.z = 18;
+            camera.position.z = window.innerWidth > window.innerHeight ? 16 : 20;
         }
         animate();
 
-        // 照片上传
         document.getElementById('file-input').onchange = (e) => {
             Array.from(e.target.files).slice(0, MAX_PHOTOS - photos.length).forEach((f) => {
                 new THREE.TextureLoader().load(URL.createObjectURL(f), (t) => {
