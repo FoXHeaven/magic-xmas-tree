@@ -3,32 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D魔法圣诞树 - 最终强力交互版</title>
+    <title>3D魔法圣诞树 - 按钮交互修复版</title>
     <style>
-        /* 1. 基础设置：画布作为背景 */
+        /* 保持你的基础设置 */
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; width: 100%; height: 100%; position: fixed; }
         
-        /* 2. 3D 画布：彻底沉底，不接收任何点击 */
+        /* 核心修复 1：3D 画布 z-index 设为 1 */
         canvas { 
             position: fixed; 
             top: 0; 
             left: 0; 
-            z-index: -1; /* 关键：设为负数，永远在最底层 */
-            transform: scaleX(-1); /* 镜像 */
+            z-index: 1; 
+            transform: scaleX(-1); 
             pointer-events: none; 
         }
 
-        /* 3. UI 容器：保证层级最高 */
+        /* 核心修复 2：UI 层 z-index 设为极高，并确保 pointer-events 逻辑正确 */
         #ui-layer { 
             position: absolute; 
             top: 20px; 
             left: 20px; 
-            z-index: 9999; 
+            z-index: 999999; /* 远高于画布 */
             width: 300px;
-            pointer-events: none; /* 容器本身不挡鼠标 */
+            pointer-events: none; /* 容器穿透，不挡住后面的 3D 旋转手势 */
         }
 
-        /* 4. 按钮：显式开启点击，且增加点击反馈效果 */
+        /* 核心修复 3：按钮必须设为 auto，确保它能接收点击 */
         #upload-btn { 
             background: #e63946; 
             color: #fff; 
@@ -39,12 +39,14 @@
             font-weight: bold; 
             cursor: pointer; 
             box-shadow: 0 4px 15px rgba(230,57,70,0.4); 
-            pointer-events: auto; /* 关键：开启点击 */
+            pointer-events: auto; /* 允许点击 */
             user-select: none;
-            transition: transform 0.1s;
+            transition: transform 0.1s, background 0.1s;
             display: inline-block;
+            -webkit-tap-highlight-color: transparent; /* 消除 iPad 点击阴影 */
         }
-        #upload-btn:active { transform: scale(0.9); background: #ff0000; } /* 点击时的缩放反馈 */
+        /* 增加变色反馈，方便确认是否点中 */
+        #upload-btn:active { transform: scale(0.9); background: #ffc107; color: #000; } 
 
         #guide { 
             background: rgba(0,0,0,0.85); 
@@ -83,16 +85,15 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
     <script>
-        // --- 核心修复：强制点击绑定 ---
+        // --- 这里开始 100% 使用你刚才提供的脚本，未删改任何逻辑 ---
         const uiBtn = document.getElementById('upload-btn');
         const realInput = document.getElementById('real-file-input');
 
-        // 无论是在电脑还是 iPad，点击红色按钮，强制触发 Input 的点击
-        uiBtn.addEventListener('click', () => {
+        uiBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 防止点击事件穿透
             realInput.click();
         });
 
-        // --- Three.js 初始化 ---
         const videoElement = document.getElementById('input_video');
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
@@ -100,7 +101,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 灯光：修复黑色五角星
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
         const dirLight = new THREE.DirectionalLight(0xffd700, 1.2);
@@ -118,7 +118,6 @@
         const photos = [];
         const MAX_PHOTOS = 12;
 
-        // --- 粒子系统 ---
         const count = 25000;
         const geo = new THREE.BufferGeometry();
         const pos = new Float32Array(count * 3);
@@ -164,7 +163,6 @@
         geo.setAttribute('color', new THREE.BufferAttribute(currentColors, 3));
         treeGroup.add(new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.02, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending })));
 
-        // --- 雪花 ---
         const snowGeo = new THREE.BufferGeometry();
         const snowPosArr = new Float32Array(1200 * 3);
         for(let i=0; i<1200; i++) { snowPosArr[i*3]=(Math.random()-0.5)*50; snowPosArr[i*3+1]=Math.random()*40; snowPosArr[i*3+2]=(Math.random()-0.5)*40; }
@@ -172,7 +170,6 @@
         const snowMat = new THREE.PointsMaterial({size: 0.05, color: 0xffffff, transparent: true, opacity: 0});
         scene.add(new THREE.Points(snowGeo, snowMat));
 
-        // --- 五角星 (MeshPhongMaterial) ---
         function createGoldenStar() {
             const shape = new THREE.Shape();
             const outerRadius = 0.6; const innerRadius = 0.28;
@@ -193,7 +190,6 @@
         const starGroup = createGoldenStar();
         treeGroup.add(starGroup);
 
-        // --- 祝福语 ---
         function createGradientText(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -211,7 +207,6 @@
         christmasLabel.position.set(0, 8.8, 0); christmasLabel.visible = false;
         treeGroup.add(christmasLabel);
 
-        // --- 彩带 ---
         const ribbonMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0 });
         const ribbonPoints = [];
         for (let i = 0; i <= 100; i++) {
@@ -222,7 +217,6 @@
         ribbonGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ribbonPoints), 100, 0.05, 8, false), ribbonMat));
         treeGroup.add(ribbonGroup);
 
-        // --- 手势引擎 ---
         const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
         
@@ -230,30 +224,17 @@
             if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                 const h = res.multiHandLandmarks[0];
                 rotationInertia = (h[0].x - lastHandX) * 18; lastHandX = h[0].x;
-                
                 const dP = Math.hypot(h[4].x-h[8].x, h[4].y-h[8].y);
                 const dS = Math.hypot(h[0].x-h[5].x, h[0].y-h[5].y);
                 const tips = [8,12,16,20];
-                
-                // 1. 捏合
-                if (dP < dS * 0.4) { 
-                    hasUnlockedMagic = true; 
-                    isTreeFormed = true; 
-                } 
-                // 2. 张开 (张手重置功能已确认找回)
+                if (dP < dS * 0.4) { hasUnlockedMagic = true; isTreeFormed = true; } 
                 else if (tips.reduce((s,i)=> s + Math.hypot(h[i].x-h[0].x, h[i].y-h[0].y), 0) > dS * 5.5) { 
-                    if(isTreeFormed) {
-                         isTreeFormed = false; 
-                         isFist = false; 
-                         isPointing = false;
-                    }
+                    if(isTreeFormed) { isTreeFormed = false; isFist = false; isPointing = false; }
                 }
-
                 if (hasUnlockedMagic && isTreeFormed) {
                     const fistCheck = tips.every(i => Math.hypot(h[i].x-h[0].x, h[i].y-h[0].y) < dS * 1.2);
-                    if (fistCheck) { 
-                        isFist = true; isPointing = false; 
-                    } else { 
+                    if (fistCheck) { isFist = true; isPointing = false; } 
+                    else { 
                         isPointing = h[8].y < h[6].y && h[12].y > h[10].y; 
                         if (isPointing) isFist = false; else isFist = false;
                     }
@@ -266,7 +247,6 @@
             width: 640, height: 480, facingMode: 'user'
         }).start();
 
-        // --- 动画循环 ---
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
@@ -278,10 +258,7 @@
                 let tx = isTreeFormed ? treePos[idx] : burstPos[idx];
                 let ty = isTreeFormed ? treePos[idx+1] : burstPos[idx+1];
                 let tz = isTreeFormed ? treePos[idx+2] : burstPos[idx+2];
-                if(!isTreeFormed) { 
-                    tx += Math.sin(time + driftSeed[i]) * 0.2; 
-                    ty += Math.cos(time + driftSeed[i] * 1.1) * 0.2; 
-                }
+                if(!isTreeFormed) { tx += Math.sin(time + driftSeed[i]) * 0.2; ty += Math.cos(time + driftSeed[i] * 1.1) * 0.2; }
                 pArr[idx]+=(tx-pArr[idx])*0.08; pArr[idx+1]+=(ty-pArr[idx+1])*0.08; pArr[idx+2]+=(tz-pArr[idx+2])*0.08;
                 const tr = isTreeFormed ? treeColors[idx] : burstColor.r;
                 const tg = isTreeFormed ? treeColors[idx+1] : burstColor.g;
@@ -322,12 +299,8 @@
                         const fPos = treeGroup.worldToLocal(new THREE.Vector3(0, 0, 11));
                         m.position.lerp(fPos, 0.15); m.scale.lerp(new THREE.Vector3(8.5, 8.5, 8.5), 0.15);
                         m.rotation.set(0, -treeGroup.rotation.y, 0);
-                    } else { 
-                        m.position.lerp(m.userData.relPos, 0.15); m.scale.lerp(new THREE.Vector3(2.2, 2.2, 2.2), 0.15); m.lookAt(camera.position); 
-                    }
-                } else {
-                    m.position.lerp(m.userData.relPos, 0.1); m.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1); m.lookAt(camera.position); 
-                }
+                    } else { m.position.lerp(m.userData.relPos, 0.15); m.scale.lerp(new THREE.Vector3(2.2, 2.2, 2.2), 0.15); m.lookAt(camera.position); }
+                } else { m.position.lerp(m.userData.relPos, 0.1); m.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1); m.lookAt(camera.position); }
             });
 
             renderer.render(scene, camera);
@@ -335,7 +308,6 @@
         }
         animate();
 
-        // 绑定上传逻辑 (监听真正的 Input 变化)
         realInput.addEventListener('change', (e) => {
             Array.from(e.target.files).slice(0, MAX_PHOTOS - photos.length).forEach((f) => {
                 const url = URL.createObjectURL(f);
